@@ -189,7 +189,7 @@ def parse_totals(table):
     print('parsing totals')
     rows = parse_rows(table)
     for row in rows:
-        type = row[0]
+        type = row[0].replace(u'\xa0', u'')
         count = row[1].split(' ')[0]
         print("{}: {}".format(type, count))
         totals_string = totals_string + ', ' + count
@@ -202,8 +202,8 @@ def parse_counties(table):
     print('parsing counties')
     rows = parse_rows(table)
     for row in rows:
-        county = row[1].replace(u'\xa0', u'').lower()
-        count = row[2]
+        county = row[0].replace(u'\xa0', u'').lower()
+        count = row[1].replace(u'\xa0', u'')
         print("{} county: {}".format(county, count))
         if county in [county.lower() for county in counties]:
             county_counts[county] = count
@@ -227,7 +227,6 @@ def parse_table(table):
         parse_totals(table)
     else:
         print('Error: unknown table!')
-        print(table)
 
 
 def scrape():
@@ -262,6 +261,7 @@ def plot_counties():
     plt.legend()
     plt.show()
 
-
 if __name__ == "__main__":
+    scrape()
     plot_totals()
+    plot_counties()
