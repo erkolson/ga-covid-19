@@ -250,7 +250,7 @@ def plot_totals():
     y = totals['Cases']
     plt.plot(totals['Date'], totals['Cases'], label="Confirmed Cases")
     plt.plot(totals['Date'], totals['Deaths'], label="Deaths")
-    plt.xticks(rotation=90)
+    plt.xticks(rotation=45)
     plt.legend()
     plt.show()
 
@@ -260,7 +260,7 @@ def plot_counties():
     x = counties_data['Date']
     for county in counties_data.columns.tolist()[1:]:
         plt.plot(x, counties_data[county], label=county)
-    plt.xticks(rotation=90)
+    plt.xticks(rotation=45)
     plt.legend()
     plt.show()
 
