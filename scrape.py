@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import re
 from requests import get
 from bs4 import BeautifulSoup
@@ -174,6 +175,7 @@ report_site = 'https://dph.georgia.gov/covid-19-daily-status-report'
 county_counts = {}
 county_csv = "data/counties.csv"
 totals_csv = "data/totals.csv"
+testing_csv = "data/testing.csv"
 
 def parse_rows(table):
     rows = []
@@ -185,8 +187,8 @@ def parse_rows(table):
             rows.append(row)
     return rows
 
-def parse_totals(table):
-    totals_string = str(date.today())
+def parse_totals(table, day):
+    totals_string = str(day)
     print('parsing totals')
     rows = parse_rows(table)
     for row in rows:
@@ -199,7 +201,7 @@ def parse_totals(table):
     with open(totals_csv, 'a') as f:
         f.write(totals_string)
 
-def parse_counties(table):
+def parse_counties(table, day):
     print('parsing counties')
     rows = parse_rows(table)
     for row in rows:
@@ -209,7 +211,7 @@ def parse_counties(table):
         if county in [county.lower() for county in counties]:
             county_counts[county] = count
 
-    county_string = str(date.today())
+    county_string = str(day)
     for county in [county.lower() for county in counties]:
         count = '0'
         if county in county_counts:
@@ -220,28 +222,42 @@ def parse_counties(table):
     with open(county_csv, 'a') as f:
         f.write(county_string)
 
-def parse_table(table):
+def parse_tests(table, day):
+    print('parsing tests: ' + str(day))
+    test_string = ''
+    rows = parse_rows(table)
+    for row in rows:
+        print(row)
+        test_string += str(day) + ', ' + row[0] + ', ' + row[1] + ', ' + row[2] + "\n"
+    with open(testing_csv, 'a') as f:
+        f.write(test_string)
+
+def parse_table(table, day):
     caption = table.find('caption').text
     if re.search('by County', caption):
-        parse_counties(table)
+        parse_counties(table, day)
     elif re.search('cases and deaths in Georgia', caption):
-        parse_totals(table)
+        parse_totals(table, day)
+    elif re.search('Testing by Lab', caption):
+        parse_tests(table, day)
     else:
         print('Error: unknown table!')
 
-
-def scrape():
-    resp = get(report_site, stream=True)
-    soup = BeautifulSoup(resp.content, 'html.parser')
+def scrape(day=date.today(),html=None):
+    if html is None:
+        resp = get(report_site, stream=True)
+        soup = BeautifulSoup(resp.content, 'html.parser')
+        # archive today's site
+        today = date.today()
+        filename = 'raw-pages/' + str(today) + '.html'
+        with open(filename, 'w') as f:
+            f.write(resp.text)
+    else:
+        soup = BeautifulSoup(open(html), 'html.parser')
 
     for table in soup.find_all('table'):
-        parse_table(table)
+        parse_table(table, day)
 
-    # archive site
-    today = date.today()
-    filename = 'raw-pages/' + str(today) + '.html'
-    with open(filename, 'w') as f:
-        f.write(resp.text)
 
 def plot_totals():
     totals = pd.read_csv('data/totals.csv', sep=r'\s*,\s*',
@@ -264,7 +280,13 @@ def plot_counties():
     plt.legend()
     plt.show()
 
+def re_parse_archive():
+    for file in os.listdir('raw-pages'):
+        day = file.split('.')[0]
+        scrape(day, './raw-pages/' + file)
+
 if __name__ == "__main__":
+    # re_parse_archive()
     scrape()
     plot_totals()
     plot_counties()
