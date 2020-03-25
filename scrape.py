@@ -171,8 +171,8 @@ counties = [
     'Worth',
     'Unknown'
 ]
+confirmed_rows = ["Total", "Deaths", "Hospitalized"]
 report_site = 'https://dph.georgia.gov/covid-19-daily-status-report'
-county_counts = {}
 county_csv = "data/counties.csv"
 totals_csv = "data/totals.csv"
 testing_csv = "data/testing.csv"
@@ -188,21 +188,27 @@ def parse_rows(table):
     return rows
 
 def parse_totals(table, day):
-    totals_string = str(day)
-    print('parsing totals')
+    print('\nparsing totals: ' + str(day))
+    totals_dict = {}
+    totals_string = str(day) + ', '
     rows = parse_rows(table)
     for row in rows:
         type = row[0].replace(u'\xa0', u'')
-        count = row[1].split(' ')[0]
+        count = re.split(r'[\(\s]', row[1])[0]
         print("{}: {}".format(type, count))
-        totals_string = totals_string + ', ' + count
+        if type in confirmed_rows:
+            totals_dict[type] = count
 
-    totals_string += '\n'
+    for type in confirmed_rows:
+        totals_string += totals_dict[type] + ', '
+    # remove the trailing ',' and add a newline
+    totals_string = ','.join(totals_string.split(',')[:-1]) + '\n'
     with open(totals_csv, 'a') as f:
         f.write(totals_string)
 
 def parse_counties(table, day):
-    print('parsing counties')
+    county_counts = {}
+    print('\nparsing counties: ' + str(day))
     rows = parse_rows(table)
     for row in rows:
         county = row[0].replace(u'\xa0', u'').lower()
@@ -223,12 +229,15 @@ def parse_counties(table, day):
         f.write(county_string)
 
 def parse_tests(table, day):
-    print('parsing tests: ' + str(day))
+    print('\nparsing tests: ' + str(day))
     test_string = ''
     rows = parse_rows(table)
     for row in rows:
-        print(row)
-        test_string += str(day) + ', ' + row[0] + ', ' + row[1] + ', ' + row[2] + "\n"
+        tester = row[0]
+        positive_tests = row[1]
+        total_tests = row[2]
+        print("{}: {} positive, {} total".format(tester, positive_tests, total_tests))
+        test_string += str(day) + ', ' + tester + ', ' + positive_tests + ', ' + total_tests + "\n"
     with open(testing_csv, 'a') as f:
         f.write(test_string)
 
@@ -262,10 +271,9 @@ def scrape(day=date.today(),html=None):
 def plot_totals():
     totals = pd.read_csv('data/totals.csv', sep=r'\s*,\s*',
         header=0, encoding='ascii', engine='python')
-    x = totals['Date']
-    y = totals['Cases']
     plt.plot(totals['Date'], totals['Cases'], label="Confirmed Cases")
     plt.plot(totals['Date'], totals['Deaths'], label="Deaths")
+    plt.plot(totals['Date'], totals['Hospitalized'], label="Hospitalized")
     plt.xticks(rotation=45)
     plt.legend()
     plt.show()
