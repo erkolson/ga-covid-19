@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 
+import click
 import os
 import re
+import time
+import pandas as pd
+import matplotlib.pyplot as plt
 from requests import get
 from bs4 import BeautifulSoup
 from datetime import date,timedelta
-import matplotlib.pyplot as plt
-import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
 
 counties = [
     'Appling',
@@ -171,13 +175,15 @@ counties = [
     'Worth',
     'Unknown'
 ]
-confirmed_rows = ["Total", "Deaths", "Hospitalized"]
-report_site = 'https://dph.georgia.gov/covid-19-daily-status-report'
-county_csv = "data/counties.csv"
+base_site = 'https://dph.georgia.gov/covid-19-daily-status-report'
+confirmed_cases_rows = ["Total", "Deaths", "Hospitalized"]
+county_cases_csv = "data/county-cases.csv"
+county_deaths_csv = "data/county-deaths.csv"
 totals_csv = "data/totals.csv"
 testing_csv = "data/testing.csv"
 
 def parse_rows(table):
+    # print("got a table:\n\n")
     rows = []
     table_rows = table.find_all('tr')
     for tr in table_rows:
@@ -187,52 +193,64 @@ def parse_rows(table):
             rows.append(row)
     return rows
 
-def parse_totals(table, day):
+def parse_totals(rows, day):
     print('\nparsing totals: ' + str(day))
     totals_dict = {}
     totals_string = str(day) + ', '
-    rows = parse_rows(table)
-    for row in rows:
-        type = row[0].replace(u'\xa0', u'')
+    # rows = parse_rows(table)
+    for row in rows[1:]:
+        type = row[0].replace(u'\xa0', u'').replace(u' ', u'')
         count = re.split(r'[\(\s]', row[1])[0]
         print("{}: {}".format(type, count))
-        if type in confirmed_rows:
+        if type in confirmed_cases_rows:
             totals_dict[type] = count
 
-    for type in confirmed_rows:
+    for type in confirmed_cases_rows:
         totals_string += totals_dict[type] + ', '
     # remove the trailing ',' and add a newline
     totals_string = ','.join(totals_string.split(',')[:-1]) + '\n'
     with open(totals_csv, 'a') as f:
         f.write(totals_string)
 
-def parse_counties(table, day):
-    county_counts = {}
+def parse_counties(rows, day):
+    county_cases = {}
+    county_deaths = {}
     print('\nparsing counties: ' + str(day))
-    rows = parse_rows(table)
+    # rows = parse_rows(table)
     for row in rows:
-        county = row[0].replace(u'\xa0', u'').lower()
-        count = row[1].replace(u'\xa0', u'')
-        print("{} county: {}".format(county, count))
-        if county in [county.lower() for county in counties]:
-            county_counts[county] = count
+        if len(row) == 3:
+            county = row[0].replace(u'\xa0', u'').lower()
+            cases = row[1].replace(u'\xa0', u'').replace(u' ', u'')
+            deaths = row[2].replace(u'\xa0', u'').replace(u' ', u'')
+            print("{} county: {} cases, {} deaths".format(county, cases, deaths))
+            if county in [county.lower() for county in counties]:
+                county_cases[county] = cases
+                county_deaths[county] = deaths
 
-    county_string = str(day)
+    county_cases_string = str(day)
+    county_deaths_string = str(day)
     for county in [county.lower() for county in counties]:
-        count = '0'
-        if county in county_counts:
-            count = county_counts[county]
-        county_string = county_string + ", " + count
+        cases = '0'
+        deaths = '0'
+        if county in county_cases:
+            cases = county_cases[county]
+        if county in county_deaths:
+            deaths = county_deaths[county]
+        county_cases_string += ', ' + cases
+        county_deaths_string += ', ' + deaths
 
-    county_string += "\n"
-    with open(county_csv, 'a') as f:
-        f.write(county_string)
+    county_cases_string += "\n"
+    county_deaths_string += "\n"
+    with open(county_cases_csv, 'a') as f:
+        f.write(county_cases_string)
+    with open(county_deaths_csv, 'a') as f:
+        f.write(county_deaths_string)
 
-def parse_tests(table, day):
+def parse_tests(rows, day):
     print('\nparsing tests: ' + str(day))
     test_string = ''
-    rows = parse_rows(table)
-    for row in rows:
+    # rows = parse_rows(table)
+    for row in rows[1:]:
         tester = row[0]
         positive_tests = row[1]
         total_tests = row[2]
@@ -241,26 +259,43 @@ def parse_tests(table, day):
     with open(testing_csv, 'a') as f:
         f.write(test_string)
 
-def parse_table(table, day):
-    caption = table.find('caption').text
-    if re.search('by County', caption):
-        parse_counties(table, day)
-    elif re.search('cases and deaths in Georgia', caption):
-        parse_totals(table, day)
-    elif re.search('Testing by Lab', caption):
-        parse_tests(table, day)
+def parse_table(html_table, day):
+    rows = parse_rows(html_table)
+    # print(rows)
+    first_cell = rows[0][0]
+    # print('first_cell = {}'.format(first_cell))
+
+    if re.search('COVID-19 Confirmed Cases By County:', first_cell):
+        parse_counties(rows, day)
+    elif re.search('COVID-19 Confirmed Cases:', first_cell):
+        parse_totals(rows, day)
+    elif re.search('COVID-19 Testing By Lab Type:', first_cell):
+        parse_tests(rows, day)
     else:
         print('Error: unknown table!')
 
 def scrape(day=date.today(),html=None):
     if html is None:
-        resp = get(report_site, stream=True)
-        soup = BeautifulSoup(resp.content, 'html.parser')
+        options = Options()
+        options.headless = True
+        driver = webdriver.Firefox(options=options)
+
+        driver.get(base_site)
+        time.sleep(5)
+        html = driver.find_element_by_tag_name('html').get_attribute('innerHTML')
+        base_soup = BeautifulSoup(html, 'html.parser')
+        iframe = base_soup.iframe
+        report_site = iframe['src']
+        report_data = get(report_site, stream=True)
+        soup = BeautifulSoup(report_data.content, 'html.parser')
+
+        # import pdb; pdb.set_trace()
+
         # archive today's site
         today = date.today()
         filename = 'raw-pages/' + str(today) + '.html'
         with open(filename, 'w') as f:
-            f.write(resp.text)
+            f.write(report_data.text)
     else:
         soup = BeautifulSoup(open(html), 'html.parser')
 
@@ -279,7 +314,7 @@ def plot_totals():
     plt.show()
 
 def plot_counties():
-    counties_data = pd.read_csv('data/counties.csv', sep=r'\s*,\s*',
+    counties_data = pd.read_csv(county_cases_csv, sep=r'\s*,\s*',
         header=0, encoding='ascii', engine='python')
     x = counties_data['Date']
     for county in counties_data.columns.tolist()[1:]:
@@ -288,13 +323,18 @@ def plot_counties():
     plt.legend()
     plt.show()
 
-def re_parse_archive():
-    for file in os.listdir('raw-pages'):
-        day = file.split('.')[0]
-        scrape(day, './raw-pages/' + file)
+def re_parse(filepath=None):
+    if filepath is None:
+        for file in os.listdir('raw-pages'):
+            day = file.split('.')[0]
+            scrape(day, './raw-pages/' + file)
+    else:
+        day = os.path.basename(filepath).split('.')[0]
+        scrape(day, filepath)
 
 if __name__ == "__main__":
-    # re_parse_archive()
+    # re_parse('./raw-pages/2020-03-28.html')
+    # re_parse('./raw-pages/2020-03-29.html')
     scrape()
     plot_totals()
     plot_counties()

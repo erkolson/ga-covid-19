@@ -1,5 +1,7 @@
 beautifulsoup4
-requests
+click
 datetime
 matplotlib
 pandas
+requests
+selenium
