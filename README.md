@@ -17,9 +17,8 @@ brew install geckodriver
 ```
 But pay attention to the [version compatibility chart](https://firefox-source-docs.mozilla.org/testing/geckodriver/Support.html)
 
-Then, clone the repository and create create the virtual env:
+Then, clone the repository and create the virtual env:
 ```
-brew install geckodriver
 cd ga-covid-19
 python3 -m venv venv-scrape
 source ./venv-scrape/bin/activate
