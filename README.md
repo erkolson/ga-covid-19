@@ -6,6 +6,12 @@ than any single day's report so this script scrapes the site, parses the
 data for confirmed cases, counties, testing, and appends each result to
 the relevant csv file in `data/`.
 
+## Aren't these results meaningless?!
+
+Testing is extremely limited relative to the population size, and community
+spread of weeks to more than a month has been observed throughout the country.
+It is clear that likely only [1 in 10](https://www.medrxiv.org/content/10.1101/2020.04.06.20055582v1) cases are being detected.  Even still, trends in this data, if collected
+in a consistent manner, can provide some evidence of the overall population trends.
 
 ## How to use?
 
