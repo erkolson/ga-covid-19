@@ -333,8 +333,15 @@ def plot_totals():
 def plot_daily():
     totals = pd.read_csv('data/totals.csv', sep=r'\s*,\s*',
         header=0, encoding='ascii', engine='python')
-    plt.plot(totals['Cases'], totals['Cases'].diff(), label="Confirmed cases")
-    plt.plot(totals['Deaths'], totals['Deaths'].diff(), label="Deaths")
+
+    fs = 7 # smoothing factor in days
+
+    smoothed_cases = totals['Cases'].rolling(fs, win_type='boxcar').sum()/fs
+    plt.plot(smoothed_cases, smoothed_cases.diff(), label="Confirmed cases")
+
+    smoothed_deaths = totals['Deaths'].rolling(fs, win_type='boxcar').sum()/fs
+    plt.plot(smoothed_deaths, smoothed_deaths.diff(), label="Deaths")
+
     plt.yscale("log")
     plt.xscale("log")
     plt.legend()
@@ -349,6 +356,7 @@ def plot_counties():
     for county in counties_data.columns.tolist()[1:]:
         plt.plot(x, counties_data[county], label=county)
     plt.xticks(rotation=45)
+    plt.yscale("log")
     plt.legend()
     plt.show()
 
